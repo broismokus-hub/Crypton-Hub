@@ -1,5 +1,5 @@
 -- ╔══════════════════════════════════╗
--- ║  Crypton Hub v3  —  Vape Style   ║
+-- ║  Test GUI  v3  —  Vape Style     ║
 -- ║  Toggle   : Right Shift          ║
 -- ║  Aimbot   : Hold X (default)     ║
 -- ║  Destroy  : RShift + Delete      ║
@@ -16,15 +16,25 @@ local Camera           = workspace.CurrentCamera
 -- ============================================================
 local Config = {
     ESP = {
-        Enabled     = false,
-        ShowBox     = true,
-        ShowName    = true,
-        ShowTracer  = false,
-        BoxColor    = Color3.fromRGB(255, 255, 255),
-        NameColor   = Color3.fromRGB(255, 255, 255),
-        TracerColor = Color3.fromRGB(255, 80, 80),
-        BoxThick    = 1,
-        MaxDist     = 500,
+        Enabled       = false,
+        ShowBox       = true,
+        ShowName      = true,
+        ShowTracer    = false,
+        ShowFill      = false,
+        ShowHealthBar = false,
+        ShowSkeleton  = false,
+        ShowDistance  = false,
+        ShowItem      = false,
+        Chams         = false,
+        BoxColor      = Color3.fromRGB(255, 255, 255),
+        NameColor     = Color3.fromRGB(255, 255, 255),
+        TracerColor   = Color3.fromRGB(255, 80, 80),
+        FillColor     = Color3.fromRGB(255, 255, 255),
+        SkeletonColor = Color3.fromRGB(255, 255, 255),
+        ChamsColor    = Color3.fromRGB(0, 170, 255),
+        ChamsTransp   = 0.5,
+        BoxThick      = 1,
+        MaxDist       = 500,
     },
     Movement = {
         Speed     = 16,
@@ -156,7 +166,7 @@ local SBTitleLbl = Instance.new("TextLabel", SBTitle)
 SBTitleLbl.Size                   = UDim2.new(1, -28, 1, 0)
 SBTitleLbl.Position               = UDim2.new(0, 10, 0, 0)
 SBTitleLbl.BackgroundTransparency = 1
-SBTitleLbl.Text                   = "✦  Crypton Hub"
+SBTitleLbl.Text                   = "✦  Test GUI"
 SBTitleLbl.TextColor3             = T.Accent
 SBTitleLbl.Font                   = Enum.Font.GothamBold
 SBTitleLbl.TextSize               = 12
@@ -697,15 +707,52 @@ end
 -- ============================================================
 AddNavEntry("👁", "ESP", 1, function(s)
     AddSection(s, "VISUALS")
-    AddToggle(s, "Enable ESP",   false, function(v) Config.ESP.Enabled    = v end)
-    AddToggle(s, "Show Boxes",   true,  function(v) Config.ESP.ShowBox    = v end)
-    AddToggle(s, "Show Names",   true,  function(v) Config.ESP.ShowName   = v end)
-    AddToggle(s, "Show Tracers", false, function(v) Config.ESP.ShowTracer = v end)
+    AddToggle(s, "Enable ESP",    false, function(v) Config.ESP.Enabled       = v end)
+    AddToggle(s, "Boxes",         true,  function(v) Config.ESP.ShowBox       = v end)
+    AddToggle(s, "Box Fill",      false, function(v) Config.ESP.ShowFill      = v end)
+    AddToggle(s, "Names",         true,  function(v) Config.ESP.ShowName      = v end)
+    AddToggle(s, "Tracers",       false, function(v) Config.ESP.ShowTracer    = v end)
+    AddToggle(s, "Health Bar",    false, function(v) Config.ESP.ShowHealthBar = v end)
+    AddToggle(s, "Skeleton",      false, function(v) Config.ESP.ShowSkeleton  = v end)
+    AddToggle(s, "Distance",      false, function(v) Config.ESP.ShowDistance  = v end)
+    AddToggle(s, "Item Held",     false, function(v) Config.ESP.ShowItem      = v end)
+    AddToggle(s, "Chams",         false, function(v)
+        Config.ESP.Chams = v
+        if not v then
+            for player, hl in pairs(ChamObjects) do
+                pcall(function() hl:Destroy() end)
+                ChamObjects[player] = nil
+            end
+        end
+    end)
     AddSection(s, "COLOURS")
+    AddColorPicker(s, "Box Colour", Config.ESP.BoxColor, function(col)
+        Config.ESP.BoxColor = col
+        for _, e in pairs(ESPObjects) do if e.Box then e.Box.Color = col end end
+    end)
+    AddColorPicker(s, "Fill Colour", Config.ESP.FillColor, function(col)
+        Config.ESP.FillColor = col
+        for _, e in pairs(ESPObjects) do if e.BoxFill then e.BoxFill.Color = col end end
+    end)
+    AddColorPicker(s, "Name Colour", Config.ESP.NameColor, function(col)
+        Config.ESP.NameColor = col
+        for _, e in pairs(ESPObjects) do if e.Name then e.Name.Color = col end end
+    end)
     AddColorPicker(s, "Tracer Colour", Config.ESP.TracerColor, function(col)
         Config.ESP.TracerColor = col
+        for _, e in pairs(ESPObjects) do if e.Tracer then e.Tracer.Color = col end end
+    end)
+    AddColorPicker(s, "Skeleton Colour", Config.ESP.SkeletonColor, function(col)
+        Config.ESP.SkeletonColor = col
         for _, e in pairs(ESPObjects) do
-            if e.Tracer then e.Tracer.Color = col end
+            if e.Skeleton then for _, ln in ipairs(e.Skeleton) do ln.Color = col end end
+        end
+    end)
+    AddColorPicker(s, "Chams Colour", Config.ESP.ChamsColor, function(col)
+        Config.ESP.ChamsColor = col
+        for _, hl in pairs(ChamObjects) do
+            hl.FillColor    = col
+            hl.OutlineColor = col
         end
     end)
 end)
@@ -1122,36 +1169,159 @@ end)
 -- ============================================================
 --  ESP DRAWINGS
 -- ============================================================
-local ESPObjects = {}
+
+-- R15 skeleton connections (part name pairs)
+local SKELETON_BONES = {
+    {"Head","UpperTorso"},
+    {"UpperTorso","LowerTorso"},
+    {"UpperTorso","LeftUpperArm"},
+    {"LeftUpperArm","LeftLowerArm"},
+    {"LeftLowerArm","LeftHand"},
+    {"UpperTorso","RightUpperArm"},
+    {"RightUpperArm","RightLowerArm"},
+    {"RightLowerArm","RightHand"},
+    {"LowerTorso","LeftUpperLeg"},
+    {"LeftUpperLeg","LeftLowerLeg"},
+    {"LeftLowerLeg","LeftFoot"},
+    {"LowerTorso","RightUpperLeg"},
+    {"RightUpperLeg","RightLowerLeg"},
+    {"RightLowerLeg","RightFoot"},
+    -- R6 fallback
+    {"Head","Torso"},
+    {"Torso","Left Arm"},
+    {"Torso","Right Arm"},
+    {"Torso","Left Leg"},
+    {"Torso","Right Leg"},
+}
+
+local ESPObjects  = {}
+local ChamObjects = {} -- player -> Highlight instance
 
 local function RemoveESP(player)
     if ESPObjects[player] then
-        for _, d in pairs(ESPObjects[player]) do pcall(function() d:Remove() end) end
+        local e = ESPObjects[player]
+        pcall(function() e.Box:Remove()         end)
+        pcall(function() e.BoxFill:Remove()     end)
+        pcall(function() e.Name:Remove()        end)
+        pcall(function() e.Tracer:Remove()      end)
+        pcall(function() e.HealthBarBG:Remove() end)
+        pcall(function() e.HealthBarFill:Remove() end)
+        pcall(function() e.Distance:Remove()    end)
+        pcall(function() e.Item:Remove()        end)
+        if e.Skeleton then
+            for _, ln in ipairs(e.Skeleton) do pcall(function() ln:Remove() end) end
+        end
         ESPObjects[player] = nil
+    end
+    if ChamObjects[player] then
+        pcall(function() ChamObjects[player]:Destroy() end)
+        ChamObjects[player] = nil
     end
 end
 
 local function CreateESP(player)
     if player == LocalPlayer then return end
     RemoveESP(player)
+
+    local function newLine()
+        local l = Drawing.new("Line")
+        l.Visible = false; l.Thickness = 1
+        l.Color   = Config.ESP.SkeletonColor
+        return l
+    end
+
+    local skeleton = {}
+    for i = 1, #SKELETON_BONES do skeleton[i] = newLine() end
+
     local e = {
-        Box    = Drawing.new("Square"),
-        Name   = Drawing.new("Text"),
-        Tracer = Drawing.new("Line"),
+        Box          = Drawing.new("Square"),
+        BoxFill      = Drawing.new("Square"),
+        Name         = Drawing.new("Text"),
+        Tracer       = Drawing.new("Line"),
+        HealthBarBG  = Drawing.new("Square"),
+        HealthBarFill= Drawing.new("Square"),
+        Distance     = Drawing.new("Text"),
+        Item         = Drawing.new("Text"),
+        Skeleton     = skeleton,
     }
-    e.Box.Visible    = false; e.Box.Filled = false
-    e.Box.Color      = Config.ESP.BoxColor; e.Box.Thickness = Config.ESP.BoxThick
-    e.Name.Visible   = false; e.Name.Center = true; e.Name.Outline = true
-    e.Name.Size      = 13;    e.Name.Font   = Drawing.Fonts.UI
-    e.Name.Color     = Config.ESP.NameColor
-    e.Tracer.Visible = false; e.Tracer.Color = Config.ESP.TracerColor
+
+    -- Box
+    e.Box.Visible   = false; e.Box.Filled    = false
+    e.Box.Color     = Config.ESP.BoxColor;  e.Box.Thickness = Config.ESP.BoxThick
+
+    -- Box fill
+    e.BoxFill.Visible = false; e.BoxFill.Filled = true
+    e.BoxFill.Color   = Config.ESP.FillColor
+    e.BoxFill.Transparency = 0.25
+
+    -- Name
+    e.Name.Visible  = false; e.Name.Center = true; e.Name.Outline = true
+    e.Name.Size     = 13;    e.Name.Font   = Drawing.Fonts.UI
+    e.Name.Color    = Config.ESP.NameColor
+
+    -- Tracer
+    e.Tracer.Visible   = false; e.Tracer.Color     = Config.ESP.TracerColor
     e.Tracer.Thickness = 1
+
+    -- Health bar background
+    e.HealthBarBG.Visible = false; e.HealthBarBG.Filled = true
+    e.HealthBarBG.Color   = Color3.fromRGB(30, 30, 30)
+    e.HealthBarBG.Transparency = 0
+
+    -- Health bar fill
+    e.HealthBarFill.Visible = false; e.HealthBarFill.Filled = true
+    e.HealthBarFill.Color   = Color3.fromRGB(50, 220, 80)
+    e.HealthBarFill.Transparency = 0
+
+    -- Distance text
+    e.Distance.Visible = false; e.Distance.Center = true; e.Distance.Outline = true
+    e.Distance.Size    = 12;    e.Distance.Font   = Drawing.Fonts.UI
+    e.Distance.Color   = Color3.fromRGB(220, 220, 220)
+
+    -- Item text
+    e.Item.Visible = false; e.Item.Center = true; e.Item.Outline = true
+    e.Item.Size    = 12;    e.Item.Font   = Drawing.Fonts.UI
+    e.Item.Color   = Color3.fromRGB(255, 210, 80)
+
     ESPObjects[player] = e
 end
 
 for _, p in ipairs(Players:GetPlayers()) do CreateESP(p) end
 Players.PlayerAdded:Connect(CreateESP)
 Players.PlayerRemoving:Connect(RemoveESP)
+
+-- Update chams when character spawns
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function() task.wait(0.1); CreateESP(p) end)
+end)
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then
+        p.CharacterAdded:Connect(function() task.wait(0.1); CreateESP(p) end)
+    end
+end
+
+local function UpdateChams(player)
+    if not Config.ESP.Chams then
+        if ChamObjects[player] then
+            pcall(function() ChamObjects[player]:Destroy() end)
+            ChamObjects[player] = nil
+        end
+        return
+    end
+    local char = player.Character
+    if not char then return end
+    if not ChamObjects[player] then
+        local hl = Instance.new("Highlight")
+        hl.FillColor         = Config.ESP.ChamsColor
+        hl.FillTransparency  = Config.ESP.ChamsTransp
+        hl.OutlineColor      = Config.ESP.ChamsColor
+        hl.OutlineTransparency = 0.3
+        hl.DepthMode         = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Adornee           = char
+        hl.Parent            = char
+        ChamObjects[player]  = hl
+    end
+end
 
 -- ============================================================
 --  FLY
@@ -1221,37 +1391,149 @@ local FovCirclePos = UserInputService:GetMouseLocation()
 RunService.RenderStepped:Connect(function()
     -- ESP
     for player, d in pairs(ESPObjects) do
-        local ok = Config.ESP.Enabled
-            and player.Character
-            and player.Character:FindFirstChild("HumanoidRootPart")
-            and player.Character:FindFirstChild("Humanoid")
-            and player.Character.Humanoid.Health > 0
-        if ok then
-            local root = player.Character.HumanoidRootPart
-            local dist = (Camera.CFrame.Position - root.Position).Magnitude
-            if dist <= Config.ESP.MaxDist then
-                local rp, onS = Camera:WorldToViewportPoint(root.Position)
-                if Config.ESP.ShowBox and onS then
-                    local tp  = Camera:WorldToViewportPoint(root.Position + Vector3.new(0,3.2,0))
-                    local bp2 = Camera:WorldToViewportPoint(root.Position - Vector3.new(0,3.2,0))
-                    local h = math.abs(tp.Y - bp2.Y); local w = h * 0.55
-                    d.Box.Size = Vector2.new(w,h); d.Box.Position = Vector2.new(rp.X-w/2, tp.Y)
-                    d.Box.Visible = true
-                else d.Box.Visible = false end
-                if Config.ESP.ShowName and onS then
-                    local np = Camera:WorldToViewportPoint(root.Position + Vector3.new(0,3.8,0))
-                    d.Name.Text = player.Name.."  ["..math.floor(dist).."m]"
-                    d.Name.Position = Vector2.new(np.X, np.Y); d.Name.Visible = true
-                else d.Name.Visible = false end
-                if Config.ESP.ShowTracer and onS then
-                    local sc = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
-                    d.Tracer.From = sc; d.Tracer.To = Vector2.new(rp.X,rp.Y); d.Tracer.Visible = true
-                else d.Tracer.Visible = false end
-            else d.Box.Visible=false; d.Name.Visible=false; d.Tracer.Visible=false end
+        local char = player.Character
+        local hum  = char and char:FindFirstChild("Humanoid")
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local ok   = Config.ESP.Enabled and char and root and hum and hum.Health > 0
+
+        -- Chams (Highlight — managed separately, always on when enabled)
+        if Config.ESP.Chams and ok then
+            UpdateChams(player)
+        elseif ChamObjects[player] then
+            pcall(function() ChamObjects[player]:Destroy() end)
+            ChamObjects[player] = nil
+        end
+
+        local function hideAll()
+            d.Box.Visible          = false
+            d.BoxFill.Visible      = false
+            d.Name.Visible         = false
+            d.Tracer.Visible       = false
+            d.HealthBarBG.Visible  = false
+            d.HealthBarFill.Visible= false
+            d.Distance.Visible     = false
+            d.Item.Visible         = false
+            if d.Skeleton then for _, ln in ipairs(d.Skeleton) do ln.Visible = false end end
+        end
+
+        if not ok then hideAll(); continue end
+
+        local dist = (Camera.CFrame.Position - root.Position).Magnitude
+        if dist > Config.ESP.MaxDist then hideAll(); continue end
+
+        local rp, onS = Camera:WorldToViewportPoint(root.Position)
+        if not onS then hideAll(); continue end
+
+        -- Shared box geometry (used by box, fill, health bar)
+        local tp  = Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3.2, 0))
+        local bp2 = Camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3.2, 0))
+        local bH  = math.abs(tp.Y - bp2.Y)
+        local bW  = bH * 0.55
+        local bX  = rp.X - bW / 2
+        local bY  = tp.Y  -- top of box
+
+        -- Box
+        if Config.ESP.ShowBox then
+            d.Box.Size     = Vector2.new(bW, bH)
+            d.Box.Position = Vector2.new(bX, bY)
+            d.Box.Color    = Config.ESP.BoxColor
+            d.Box.Visible  = true
+        else d.Box.Visible = false end
+
+        -- Box fill
+        if Config.ESP.ShowFill then
+            d.BoxFill.Size         = Vector2.new(bW, bH)
+            d.BoxFill.Position     = Vector2.new(bX, bY)
+            d.BoxFill.Color        = Config.ESP.FillColor
+            d.BoxFill.Transparency = 0.25
+            d.BoxFill.Visible      = true
+        else d.BoxFill.Visible = false end
+
+        -- Health bar (left of box)
+        if Config.ESP.ShowHealthBar then
+            local hp  = hum.Health / math.max(hum.MaxHealth, 1)
+            local barW = 3
+            local barX = bX - 6
+            -- BG
+            d.HealthBarBG.Size     = Vector2.new(barW, bH)
+            d.HealthBarBG.Position = Vector2.new(barX, bY)
+            d.HealthBarBG.Visible  = true
+            -- Fill (bottom-up)
+            local fillH = bH * hp
+            d.HealthBarFill.Size     = Vector2.new(barW, fillH)
+            d.HealthBarFill.Position = Vector2.new(barX, bY + bH - fillH)
+            -- Colour: green > yellow > red
+            if hp > 0.6 then
+                d.HealthBarFill.Color = Color3.fromRGB(50, 220, 80)
+            elseif hp > 0.3 then
+                d.HealthBarFill.Color = Color3.fromRGB(230, 180, 40)
+            else
+                d.HealthBarFill.Color = Color3.fromRGB(220, 50, 50)
+            end
+            d.HealthBarFill.Visible = true
         else
-            if d.Box    then d.Box.Visible    = false end
-            if d.Name   then d.Name.Visible   = false end
-            if d.Tracer then d.Tracer.Visible = false end
+            d.HealthBarBG.Visible   = false
+            d.HealthBarFill.Visible = false
+        end
+
+        -- Name (above box)
+        if Config.ESP.ShowName then
+            local np = Camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3.8, 0))
+            d.Name.Text     = player.Name
+            d.Name.Position = Vector2.new(np.X, np.Y)
+            d.Name.Color    = Config.ESP.NameColor
+            d.Name.Visible  = true
+        else d.Name.Visible = false end
+
+        -- Tracer
+        if Config.ESP.ShowTracer then
+            local sc = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
+            d.Tracer.From    = sc
+            d.Tracer.To      = Vector2.new(rp.X, rp.Y)
+            d.Tracer.Color   = Config.ESP.TracerColor
+            d.Tracer.Visible = true
+        else d.Tracer.Visible = false end
+
+        -- Distance text (below box)
+        local textY = bY + bH + 2
+        if Config.ESP.ShowDistance then
+            d.Distance.Text     = math.floor(dist) .. "m"
+            d.Distance.Position = Vector2.new(rp.X, textY)
+            d.Distance.Visible  = true
+            textY = textY + 14  -- push item text further down
+        else d.Distance.Visible = false end
+
+        -- Item held text
+        if Config.ESP.ShowItem then
+            local tool = char:FindFirstChildOfClass("Tool")
+            if tool then
+                d.Item.Text     = "🔧 " .. tool.Name
+                d.Item.Position = Vector2.new(rp.X, textY)
+                d.Item.Visible  = true
+            else
+                d.Item.Visible = false
+            end
+        else d.Item.Visible = false end
+
+        -- Skeleton
+        if Config.ESP.ShowSkeleton then
+            for i, pair in ipairs(SKELETON_BONES) do
+                local ln    = d.Skeleton[i]
+                local partA = char:FindFirstChild(pair[1])
+                local partB = char:FindFirstChild(pair[2])
+                if partA and partB then
+                    local sA, okA = Camera:WorldToViewportPoint(partA.Position)
+                    local sB, okB = Camera:WorldToViewportPoint(partB.Position)
+                    if okA and okB then
+                        ln.From    = Vector2.new(sA.X, sA.Y)
+                        ln.To      = Vector2.new(sB.X, sB.Y)
+                        ln.Color   = Config.ESP.SkeletonColor
+                        ln.Visible = true
+                    else ln.Visible = false end
+                else ln.Visible = false end
+            end
+        else
+            if d.Skeleton then for _, ln in ipairs(d.Skeleton) do ln.Visible = false end end
         end
     end
 
@@ -1535,7 +1817,7 @@ LocalPlayer.CharacterAdded:Connect(function(char)
     if Config.Movement.Noclip then EnableNoclip()  end
 end)
 
-print("[Crypton Hub] Loaded ✓  |  RShift = toggle  |  X (hold) = aimbot lock")
+print("[Test GUI] Loaded ✓  |  RShift = toggle  |  X (hold) = aimbot lock")
 
 -- ============================================================
 --  DESTROY
@@ -1574,6 +1856,8 @@ local function DestroyAll()
         for _, drawing in pairs(d) do pcall(function() drawing:Remove() end) end
     end
     ESPObjects = {}
+    for _, hl in pairs(ChamObjects) do pcall(function() hl:Destroy() end) end
+    ChamObjects = {}
     _silentActive = false
     _silentCF     = nil
     pcall(RemoveCameraIndexHook)
