@@ -1,5 +1,5 @@
 -- ╔══════════════════════════════════════════════════════════╗
--- ║       macOS GUI  •  Finder-Style  •  v2                 ║
+-- ║       Crypton Hub  •  Finder-Style  •  v2                 ║
 -- ║  Toggle  : RightShift   |  Destroy : RShift + Delete    ║
 -- ║  Aimbot  : Hold X (default)                             ║
 -- ║  FIXES: Shadow moves with window, aimbot instant lock   ║
@@ -173,7 +173,7 @@ local MaximizeBtn = TrafficBtn(TitleBar,M.Green,48)
 
 local TitleLbl=Instance.new("TextLabel",TitleBar)
 TitleLbl.Size=UDim2.new(1,-140,1,0); TitleLbl.Position=UDim2.new(0,70,0,0)
-TitleLbl.BackgroundTransparency=1; TitleLbl.Text="MacOS GUI"
+TitleLbl.BackgroundTransparency=1; TitleLbl.Text="Crypton Hub"
 TitleLbl.TextColor3=M.TextDark; TitleLbl.Font=Enum.Font.GothamBold
 TitleLbl.TextSize=13; TitleLbl.TextXAlignment=Enum.TextXAlignment.Center; TitleLbl.ZIndex=4
 
@@ -1276,4 +1276,4 @@ UserInputService.InputBegan:Connect(function(input,gpe)
     if input.KeyCode==Enum.KeyCode.Delete and UserInputService:IsKeyDown(Enum.KeyCode.RightShift) then DestroyAll() end
 end)
 
-print("[MacOS GUI v2] Loaded ✓  |  RShift=toggle  |  X(hold)=aimbot instant  |  RShift+Del=destroy")
+print("[Crypton Hub v2] Loaded ✓  |  RShift=toggle  |  X(hold)=aimbot instant  |  RShift+Del=destroy")
